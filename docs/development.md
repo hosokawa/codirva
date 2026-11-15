@@ -1,6 +1,6 @@
 # Development Setup
 
-Codirva is at the design stage. This guide prepares a Windows machine for the first feasibility test, which will attach to a tmux session running in WSL2. You can verify the setup below before any Codirva code is available to build.
+This guide prepares a Windows machine to run the initial Codirva prototype and verify the WSL2 tmux setup.
 
 ## Prerequisites on Windows
 
@@ -56,6 +56,16 @@ tmux attach-session -t codirva-dev
 ```
 
 The same running agent should still be there. Try typing a line of Japanese text in the prompt editor to verify that it displays correctly. This checks the Linux test environment and gives you a baseline for the Windows connection test.
+
+## Run the session browser
+
+The prototype queries the default tmux server in the WSL distribution named `archlinux`. From the repository root in Windows PowerShell, run:
+
+```powershell
+dotnet run --project src/Codirva/Codirva.csproj
+```
+
+The left pane groups sessions named `project/session` under their project name. The name must contain exactly one slash, with a nonempty name on each side. For example, `machi-match/coder` appears as `coder` under `machi-match`. Select a session to see its full tmux name. Use **Refresh** after creating or closing sessions in WSL.
 
 ## Tools for later milestones
 

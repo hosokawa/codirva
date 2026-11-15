@@ -1,0 +1,42 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:Codirva"
+        x:Class="Codirva.MainWindow"
+        Title="Codirva" Width="880" Height="540" MinWidth="520" MinHeight="320">
+  <Grid ColumnDefinitions="290,*">
+    <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+            BorderThickness="0,0,1,0" Padding="16">
+      <Grid RowDefinitions="Auto,Auto,*">
+        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+          <TextBlock Text="Projects" FontSize="20" FontWeight="SemiBold"
+                     VerticalAlignment="Center" />
+          <Button x:Name="RefreshButton" Grid.Column="1" Content="Refresh"
+                  Click="RefreshClicked" />
+        </Grid>
+        <TextBlock x:Name="DiscoveryStatus" Grid.Row="1" TextWrapping="Wrap"
+                   Margin="0,0,0,12" IsVisible="False" />
+        <TreeView x:Name="ProjectsTree" Grid.Row="2" SelectionChanged="ProjectSelectionChanged">
+          <TreeView.DataTemplates>
+            <TreeDataTemplate DataType="local:TmuxProject" x:DataType="local:TmuxProject"
+                              ItemsSource="{Binding Sessions}">
+              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+            </TreeDataTemplate>
+            <DataTemplate DataType="local:TmuxSession" x:DataType="local:TmuxSession">
+              <TextBlock Text="{Binding Name}" />
+            </DataTemplate>
+          </TreeView.DataTemplates>
+          <TreeView.Styles>
+            <Style Selector="TreeViewItem">
+              <Setter Property="IsExpanded" Value="True" />
+            </Style>
+          </TreeView.Styles>
+        </TreeView>
+      </Grid>
+    </Border>
+    <StackPanel Grid.Column="1" Margin="24">
+      <TextBlock x:Name="SessionHeading" Text="Select a session" FontSize="12"
+                 Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                 TextAlignment="Right" TextTrimming="CharacterEllipsis" />
+    </StackPanel>
+  </Grid>
+</Window>

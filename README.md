@@ -8,9 +8,9 @@ Codirva is a human-operated console. You choose the session, write the prompt, a
 
 ## Development status
 
-Codirva is at the design stage. The application and all features described below are planned.
+An initial Windows GUI lists existing tmux sessions from WSL2 under their project names. Terminal attachment and prompt sending are planned.
 
-See [Development setup](docs/development.md) to prepare a Windows machine for the first WSL2 connection test.
+See [Development setup](docs/development.md) to set up and run the prototype.
 
 ## Planned architecture
 
