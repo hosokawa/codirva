@@ -1,8 +1,9 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="using:Codirva"
+        xmlns:terminal="using:RoyalTerminal.Avalonia.Controls"
         x:Class="Codirva.MainWindow"
-        Title="Codirva" Width="880" Height="540" MinWidth="520" MinHeight="320">
+        Title="Codirva" Icon="avares://Codirva/Assets/codirva-v3.ico" Width="880" Height="540" MinWidth="520" MinHeight="320">
   <Grid ColumnDefinitions="290,*">
     <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
             BorderThickness="0,0,1,0" Padding="16">
@@ -22,7 +23,7 @@
               <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
             </TreeDataTemplate>
             <DataTemplate DataType="local:TmuxSession" x:DataType="local:TmuxSession">
-              <TextBlock Text="{Binding Name}" />
+              <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
             </DataTemplate>
           </TreeView.DataTemplates>
           <TreeView.Styles>
@@ -33,10 +34,23 @@
         </TreeView>
       </Grid>
     </Border>
-    <StackPanel Grid.Column="1" Margin="24">
+    <Grid Grid.Column="1" Margin="16" RowDefinitions="Auto,*,Auto" RowSpacing="8">
       <TextBlock x:Name="SessionHeading" Text="Select a session" FontSize="12"
                  Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                  TextAlignment="Right" TextTrimming="CharacterEllipsis" />
-    </StackPanel>
+      <Border Grid.Row="1" Background="#171717" ClipToBounds="True">
+        <terminal:TerminalControl x:Name="SessionTerminal" TerminalFontSize="13" IsVisible="False" />
+      </Border>
+      <Grid Grid.Row="2" RowDefinitions="Auto,Auto" RowSpacing="6" ColumnDefinitions="*,Auto"
+            ColumnSpacing="8">
+        <TextBox x:Name="PromptBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="68"
+                 MaxHeight="144" PlaceholderText="Enter a prompt" IsEnabled="False"
+                 AutomationProperties.Name="Prompt" TextChanged="PromptChanged" />
+        <Button x:Name="SendButton" Grid.Column="1" VerticalAlignment="Bottom"
+                Content="Send" ToolTip.Tip="Ctrl+Enter" IsEnabled="False" Click="SendClicked" />
+        <TextBlock x:Name="TerminalStatus" Grid.Row="1" Grid.ColumnSpan="2" FontSize="12"
+                   TextWrapping="Wrap" IsVisible="False" />
+      </Grid>
+    </Grid>
   </Grid>
 </Window>

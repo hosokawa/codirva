@@ -8,9 +8,11 @@ Codirva is a human-operated console. You choose the session, write the prompt, a
 
 ## Development status
 
-An initial Windows GUI lists existing tmux sessions from WSL2 under their project names. Terminal attachment and prompt sending are planned.
+The Windows prototype lists tmux sessions from all configured WSL2 and SSH targets together by project and attaches to the selected session in an interactive terminal. Each session shows its connection. The prompt composer supports multiline input and submission to Codex CLI and Claude Code.
 
 See [Development setup](docs/development.md) to set up and run the prototype.
+
+Copy [config.example.json](config.example.json) to your user configuration directory as `config.json`, then edit the connection targets for your environment. On Windows this is `%APPDATA%\Codirva\config.json`; on Linux it is `~/.config/codirva/config.json` (or `$XDG_CONFIG_HOME/codirva/config.json`); on macOS it is `~/Library/Application Support/Codirva/config.json`. See the development guide for copy commands. The current application is a Windows prototype; these paths do not imply Linux or macOS runtime support.
 
 ## Planned architecture
 

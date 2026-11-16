@@ -57,17 +57,36 @@ tmux attach-session -t codirva-dev
 
 The same running agent should still be there. Try typing a line of Japanese text in the prompt editor to verify that it displays correctly. This checks the Linux test environment and gives you a baseline for the Windows connection test.
 
-## Run the session browser
+## Configure connections
 
-The prototype queries the default tmux server in the WSL distribution named `archlinux`. From the repository root in Windows PowerShell, run:
+Copy `config.example.json` from the repository root to your user configuration directory as `config.json`, then edit its `targets` array. Each `wsl` target names a distribution; each `ssh` target names an OpenSSH host alias or `user@host`. Do not put passwords or private keys in this file. The user configuration is outside the repository and is not committed.
+
+On Windows, from the repository root in PowerShell:
+
+```powershell
+New-Item -ItemType Directory -Force -Path "$env:APPDATA\Codirva"
+Copy-Item config.example.json "$env:APPDATA\Codirva\config.json"
+```
+
+For a future native Linux or macOS build, the corresponding locations are `$XDG_CONFIG_HOME/codirva/config.json` (default `~/.config/codirva/config.json`) and `~/Library/Application Support/Codirva/config.json`. These locations describe the configuration format, not current platform support. Copy with `mkdir -p ~/.config/codirva && cp config.example.json ~/.config/codirva/config.json` on Linux (adjust for `XDG_CONFIG_HOME`), or `mkdir -p "$HOME/Library/Application Support/Codirva" && cp config.example.json "$HOME/Library/Application Support/Codirva/config.json"` on macOS. These commands overwrite an existing configuration.
+
+## Run the prototype
+
+From the repository root in Windows PowerShell, run:
 
 ```powershell
 dotnet run --project src/Codirva/Codirva.csproj
 ```
 
+All configured connections are queried together. **Refresh** reloads the configuration file and queries all targets again. Sessions from different targets with the same project name appear under one project, with their connection shown beside each session. A connection failure is reported while successful targets remain visible. For SSH, the Windows OpenSSH client must be installed, the host key must already be trusted, and authentication must work without an interactive password or passphrase prompt (for example, with an SSH agent). SSH configuration can provide a non-default port or identity. Selecting a listed session opens an interactive terminal; the prompt-composer restrictions described below apply over SSH too.
+
 The left pane groups sessions named `project/session` under their project name. The name must contain exactly one slash, with a nonempty name on each side. For example, `machi-match/coder` appears as `coder` under `machi-match`. Select a session to see its full tmux name. Use **Refresh** after creating or closing sessions in WSL.
+
+Selecting a session attaches the right-hand terminal to tmux. Use the terminal for interactive menus and keys such as **Ctrl+C**. Switching sessions or closing Codirva detaches its terminal client and leaves the tmux session running.
+
+To send a prompt, launch Codex CLI or Claude Code in a tmux session with one window and one pane. When the agent is ready for input, type in Codirva’s prompt box. **Enter** inserts a newline. **Ctrl+Enter** or **Send** pastes and submits the prompt to the selected pane. The pane must have bracketed paste enabled and must not be in copy mode. Drafts are held per session while Codirva is open. Verify multiline and Japanese input with your agent before relying on it.
 
 ## Tools for later milestones
 
-- **Avalonia GUI.** When GUI development begins, install the project templates from Windows PowerShell with `dotnet new install Avalonia.Templates`. The optional Avalonia for VSCode extension adds `.axaml` editing support. [Avalonia template setup](https://docs.avaloniaui.net/docs/get-started/install-avalonia) · [VS Code setup](https://docs.avaloniaui.net/docs/get-started/set-up-your-ide)
+- **Avalonia editing tools.** The optional Avalonia for VSCode extension adds `.axaml` editing support. Install project templates with `dotnet new install Avalonia.Templates` if you need to create a new Avalonia project. [Avalonia template setup](https://docs.avaloniaui.net/docs/get-started/install-avalonia) · [VS Code setup](https://docs.avaloniaui.net/docs/get-started/set-up-your-ide)
 - **Remote Linux over SSH.** Check for the Windows OpenSSH Client with `ssh.exe -V` in PowerShell. If it is missing, enable **OpenSSH Client** in Windows Optional Features. The remote Linux host needs a reachable SSH server, tmux, and a working agent CLI. [Windows OpenSSH setup](https://learn.microsoft.com/en-us/windows-server/administration/openssh/openssh_install_firstuse)
