@@ -19,6 +19,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         PromptBox.AddHandler(KeyDownEvent, PromptKeyDown, RoutingStrategies.Tunnel);
+        SessionTerminal.AddHandler(KeyDownEvent, TerminalCopyCompleted, RoutingStrategies.Bubble, handledEventsToo: true);
         SessionTerminal.ProcessExited += (_, _) =>
         {
             _attachedSession = null;
@@ -177,6 +178,24 @@ public partial class MainWindow : Window
     }
 
     private void PromptChanged(object? sender, TextChangedEventArgs e) => UpdateComposer();
+
+    private async void TerminalCopyCompleted(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Insert || e.KeyModifiers != KeyModifiers.Control || !SessionTerminal.HasSelection)
+        {
+            return;
+        }
+
+        try
+        {
+            await SessionTerminal.CopySelectionAsync();
+            SessionTerminal.ClearSelection();
+        }
+        catch (Exception error)
+        {
+            ShowTerminalStatus($"Could not copy selection. {error.Message}");
+        }
+    }
 
     private async void SendClicked(object? sender, RoutedEventArgs e) => await SendPromptAsync();
 
