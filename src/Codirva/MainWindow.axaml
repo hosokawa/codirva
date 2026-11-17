@@ -3,7 +3,7 @@
         xmlns:local="using:Codirva"
         xmlns:terminal="using:RoyalTerminal.Avalonia.Controls"
         x:Class="Codirva.MainWindow"
-        Title="Codirva" Icon="avares://Codirva/Assets/codirva-v3.ico" Width="880" Height="540" MinWidth="520" MinHeight="320">
+        Title="Codirva" Icon="avares://Codirva/Assets/codirva.ico" Width="880" Height="540" MinWidth="520" MinHeight="320">
   <Grid ColumnDefinitions="290,*">
     <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
             BorderThickness="0,0,1,0" Padding="16">
