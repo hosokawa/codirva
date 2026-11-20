@@ -1,0 +1,25 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Codirva.NewSessionWindow"
+        Title="New Session" Width="400" SizeToContent="Height"
+        CanResize="False" WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="20" Spacing="12">
+    <StackPanel Spacing="4">
+      <Label Content="Connection" Target="{Binding #ConnectionBox}" />
+      <ComboBox x:Name="ConnectionBox" HorizontalAlignment="Stretch" />
+    </StackPanel>
+    <StackPanel Spacing="4">
+      <Label Content="Group name" Target="{Binding #GroupBox}" />
+      <TextBox x:Name="GroupBox" />
+    </StackPanel>
+    <StackPanel Spacing="4">
+      <Label Content="Session name" Target="{Binding #NameBox}" />
+      <TextBox x:Name="NameBox" />
+    </StackPanel>
+    <TextBlock x:Name="ValidationMessage" TextWrapping="Wrap" IsVisible="False" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Content="Cancel" IsCancel="True" Click="CancelClicked" />
+      <Button Content="Add" IsDefault="True" Click="AddClicked" />
+    </StackPanel>
+  </StackPanel>
+</Window>

@@ -78,11 +78,15 @@ From the repository root in Windows PowerShell, run:
 dotnet run --project src/Codirva/Codirva.csproj
 ```
 
-All configured connections are queried together. **Refresh** reloads the configuration file and queries all targets again. Sessions from different targets with the same project name appear under one project, with their connection shown beside each session. A connection failure is reported while successful targets remain visible. For SSH, the Windows OpenSSH client must be installed, the host key must already be trusted, and authentication must work without an interactive password or passphrase prompt (for example, with an SSH agent). SSH configuration can provide a non-default port or identity. Selecting a listed session opens an interactive terminal; the prompt-composer restrictions described below apply over SSH too.
+All configured connections are queried together. **Projects → ⋯ → Refresh** reloads the configuration file and queries all targets again. Sessions from different targets with the same project name appear under one project, with their connection shown beside each session. A connection failure is reported while successful targets remain visible. For SSH, the Windows OpenSSH client must be installed, the host key must already be trusted, and authentication must work without an interactive password or passphrase prompt (for example, with an SSH agent). SSH configuration can provide a non-default port or identity. Selecting a listed session opens an interactive terminal; the prompt-composer restrictions described below apply over SSH too.
 
 The left pane groups sessions named `project/session` under their project name. The name must contain exactly one slash, with a nonempty name on each side. For example, `machi-match/coder` appears as `coder` under `machi-match`. Select a session to see its full tmux name. Use **Refresh** after creating or closing sessions in WSL.
 
 Selecting a session attaches the right-hand terminal to tmux. Use the terminal for interactive menus and keys such as **Ctrl+C**. Switching sessions or closing Codirva detaches its terminal client and leaves the tmux session running.
+
+Hover over **Projects** or focus its buttons to show **+** and **⋯**. Choose **+** to select a connection and enter a group name and session name. **Add** opens a shell in the connection's home directory and remembers the session. An existing session with the same name on the same connection is opened as well. **Refresh** and **Exit** are in the **Projects** menu.
+
+When a saved session has stopped, hover over its row or focus its actions to show **Start** and **⋯**. **Start** opens a new shell in that session. The row menu's **Forget** action removes the saved entry after checking that the session is still absent. If the connection is unavailable, the entry stays visible until its status can be checked.
 
 To send a prompt, launch Codex CLI or Claude Code in a tmux session with one window and one pane. When the agent is ready for input, type in Codirva’s prompt box. **Enter** inserts a newline. **Ctrl+Enter** or **Send** pastes and submits the prompt to the selected pane. The pane must have bracketed paste enabled and must not be in copy mode. Drafts are held per session while Codirva is open. Verify multiline and Japanese input with your agent before relying on it.
 

@@ -12,6 +12,7 @@ public partial class MainWindow : Window
     private TmuxSession? _selectedSession;
     private TmuxSession? _attachedSession;
     private bool _refreshingSelection;
+    private bool _managingSessions;
     private bool _sending;
     private bool _closed;
 
@@ -26,7 +27,7 @@ public partial class MainWindow : Window
             ShowTerminalStatus("Disconnected. Select a session or use Refresh to reconnect.");
             UpdateComposer();
         };
-        Opened += async (_, _) => await RefreshProjectsAsync();
+        Opened += async (_, _) => await ManageSessionsAsync(() => RefreshProjectsAsync());
         Closed += (_, _) =>
         {
             _closed = true;
@@ -38,56 +39,134 @@ public partial class MainWindow : Window
     }
 
     private async void RefreshClicked(object? sender, RoutedEventArgs e) =>
-        await RefreshProjectsAsync();
+        await ManageSessionsAsync(() => RefreshProjectsAsync());
 
-    private async Task RefreshProjectsAsync()
+    private void ExitClicked(object? sender, RoutedEventArgs e) => Close();
+
+    private async void NewSessionClicked(object? sender, RoutedEventArgs e) =>
+        await ManageSessionsAsync(async () =>
+        {
+            var dialog = new NewSessionWindow(ConnectionConfig.Load());
+            var session = await dialog.ShowDialog<SavedSession?>(this);
+            if (session is null)
+            {
+                return;
+            }
+
+            var saved = SavedSessions.Load();
+            await TmuxDiscovery.CreateSessionAsync(session);
+            SavedSessions.Save(saved.Where(item => item.Key != session.Key).Append(session));
+            await RefreshProjectsAsync(session);
+        });
+
+    private async void StartClicked(object? sender, RoutedEventArgs e)
     {
-        RefreshButton.IsEnabled = false;
-        ShowDiscoveryStatus("Loading sessions…");
+        if (sender is Button { DataContext: TmuxSession { CanStart: true } session })
+        {
+            await ManageSessionsAsync(async () =>
+            {
+                await TmuxDiscovery.CreateSessionAsync(session.Saved);
+                await RefreshProjectsAsync(session.Saved);
+            });
+        }
+    }
 
+    private async void ForgetClicked(object? sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { CommandParameter: TmuxSession { CanStart: true } session })
+        {
+            await ManageSessionsAsync(async () =>
+            {
+                var projects = await TmuxDiscovery.ListProjectsAsync(session.Target);
+                if (!projects.SelectMany(project => project.Sessions).Any(item => item.FullName == session.FullName))
+                {
+                    SavedSessions.Save(SavedSessions.Load().Where(item => item.Key != session.Saved.Key));
+                }
+
+                await RefreshProjectsAsync();
+            });
+        }
+    }
+
+    private async Task ManageSessionsAsync(Func<Task> action)
+    {
+        if (_managingSessions || _sending || _closed)
+        {
+            return;
+        }
+
+        _managingSessions = true;
+        NewSessionButton.IsEnabled = false;
+        UpdateComposer();
         try
         {
-            var targets = ConnectionConfig.Load();
-            var results = await Task.WhenAll(targets.Distinct().Select(async target =>
-            {
-                try
-                {
-                    return (Projects: await TmuxDiscovery.ListProjectsAsync(target), Error: (string?)null);
-                }
-                catch (Exception error) when (error is InvalidOperationException or IOException or System.ComponentModel.Win32Exception)
-                {
-                    return (Projects: (IReadOnlyList<TmuxProject>)Array.Empty<TmuxProject>(),
-                        Error: $"{target}: {error.Message}");
-                }
-            }));
-            var projects = results.SelectMany(result => result.Projects)
-                .GroupBy(project => project.Name, StringComparer.Ordinal)
-                .OrderBy(group => group.Key, StringComparer.Ordinal)
-                .Select(group => new TmuxProject(group.Key, group.SelectMany(project => project.Sessions)
-                    .OrderBy(session => session.Name, StringComparer.Ordinal)
-                    .ThenBy(session => session.Target.DisplayName, StringComparer.Ordinal)
-                    .ThenBy(session => session.Target.Distribution, StringComparer.Ordinal).ToArray()))
-                .ToArray();
-            var selected = ProjectsTree.SelectedItem as TmuxSession;
-            _refreshingSelection = true;
-            ProjectsTree.ItemsSource = projects;
-            ProjectsTree.SelectedItem = projects.SelectMany(project => project.Sessions)
-                .FirstOrDefault(session => session == selected);
-            _refreshingSelection = false;
-            var errors = results.Where(result => result.Error is not null).Select(result => result.Error);
-            var message = string.Join("\n", errors);
-            ShowDiscoveryStatus(message.Length > 0 ? $"Some connections could not be listed:\n{message}"
-                : projects.Length == 0 ? "No matching tmux sessions." : null);
-            await SelectSessionAsync();
+            await action();
         }
-        catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception)
+        catch (Exception error) when (error is InvalidOperationException or IOException or UnauthorizedAccessException
+            or System.Text.Json.JsonException or System.ComponentModel.Win32Exception)
         {
-            ShowDiscoveryStatus($"Could not list tmux sessions. {error.Message}");
+            ShowDiscoveryStatus(error.Message);
         }
         finally
         {
-            RefreshButton.IsEnabled = true;
+            _managingSessions = false;
+            NewSessionButton.IsEnabled = true;
+            UpdateComposer();
         }
+    }
+
+    private async Task RefreshProjectsAsync(SavedSession? select = null)
+    {
+        ShowDiscoveryStatus("Loading sessions…");
+        var saved = SavedSessions.Load();
+        var targets = ConnectionConfig.Load().DistinctBy(target => (target.IsSsh, target.Distribution));
+        var results = await Task.WhenAll(targets.Select(async target =>
+        {
+            try
+            {
+                return (Target: target, Projects: await TmuxDiscovery.ListProjectsAsync(target), Error: (string?)null);
+            }
+            catch (Exception error) when (error is InvalidOperationException or IOException or System.ComponentModel.Win32Exception)
+            {
+                return (Target: target, Projects: (IReadOnlyList<TmuxProject>)Array.Empty<TmuxProject>(),
+                    Error: $"{target}: {error.Message}");
+            }
+        }));
+        if (_closed)
+        {
+            return;
+        }
+
+        var sessions = results.SelectMany(result => result.Projects)
+            .SelectMany(project => project.Sessions).ToList();
+        var runningKeys = sessions.Select(session => session.Saved.Key).ToHashSet();
+        foreach (var entry in saved.Where(entry => !runningKeys.Contains(entry.Key)))
+        {
+            var result = results.FirstOrDefault(result => result.Target.IsSsh == entry.Target.IsSsh
+                && result.Target.Distribution == entry.Target.Distribution);
+            var names = entry.FullName.Split('/', 2);
+            sessions.Add(new TmuxSession(names[1], entry.FullName, names[0], result.Target ?? entry.Target, "")
+            {
+                CanStart = result.Target is not null && result.Error is null,
+            });
+        }
+
+        var projects = sessions.GroupBy(session => session.ProjectName, StringComparer.Ordinal)
+            .OrderBy(group => group.Key, StringComparer.Ordinal)
+            .Select(group => new TmuxProject(group.Key, group.OrderBy(session => session.Name, StringComparer.Ordinal)
+                .ThenBy(session => session.Target.DisplayName, StringComparer.Ordinal)
+                .ThenBy(session => session.Target.Distribution, StringComparer.Ordinal).ToArray()))
+            .ToArray();
+        var selected = select ?? (ProjectsTree.SelectedItem as TmuxSession)?.Saved;
+        _refreshingSelection = true;
+        ProjectsTree.ItemsSource = projects;
+        ProjectsTree.SelectedItem = sessions.FirstOrDefault(session => session.Saved.Key == selected?.Key);
+        _refreshingSelection = false;
+        var errors = results.Where(result => result.Error is not null).Select(result => result.Error);
+        var message = string.Join("\n", errors);
+        ShowDiscoveryStatus(message.Length > 0 ? $"Some connections could not be listed:\n{message}"
+            : projects.Length == 0 ? "No matching tmux sessions." : null);
+        await SelectSessionAsync();
     }
 
     private void ShowDiscoveryStatus(string? message)
@@ -134,8 +213,14 @@ public partial class MainWindow : Window
             _attachedSession = null;
             SessionTerminal.IsVisible = false;
             SessionTerminal.StopPty();
-            ShowTerminalStatus(session is null ? null : "Connecting to tmux…");
-            if (session is null)
+            ShowTerminalStatus(session switch
+            {
+                null => null,
+                { IsRunning: true } => "Connecting to tmux…",
+                { CanStart: true } => "Session is stopped.",
+                _ => "Session status is unavailable.",
+            });
+            if (session is not { IsRunning: true })
             {
                 return;
             }
@@ -249,7 +334,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        PromptBox.IsEnabled = !_sending && _selectedSession is not null
+        PromptBox.IsEnabled = !_sending && !_managingSessions && _selectedSession is not null
             && _selectedSession == _attachedSession && SessionTerminal.HasActiveSession;
         SendButton.IsEnabled = PromptBox.IsEnabled && !string.IsNullOrWhiteSpace(PromptBox.Text);
     }

@@ -5,14 +5,31 @@
         x:Class="Codirva.MainWindow"
         Title="Codirva" Icon="avares://Codirva/Assets/codirva.ico" Width="880" Height="540" MinWidth="520" MinHeight="320">
   <Grid ColumnDefinitions="290,*">
+    <Grid.Styles>
+      <Style Selector="Button.reveal">
+        <Setter Property="Opacity" Value="0" />
+      </Style>
+      <Style Selector="Grid.actions:pointerover Button.reveal, Grid.actions:focus-within Button.reveal, Button.reveal:flyout-open">
+        <Setter Property="Opacity" Value="1" />
+      </Style>
+    </Grid.Styles>
     <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
             BorderThickness="0,0,1,0" Padding="16">
       <Grid RowDefinitions="Auto,Auto,*">
-        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+        <Grid Classes="actions" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Margin="0,0,0,12"
+              Background="Transparent">
           <TextBlock Text="Projects" FontSize="20" FontWeight="SemiBold"
                      VerticalAlignment="Center" />
-          <Button x:Name="RefreshButton" Grid.Column="1" Content="Refresh"
-                  Click="RefreshClicked" />
+          <Button x:Name="NewSessionButton" Classes="reveal" Grid.Column="1" Content="+"
+                  AutomationProperties.Name="New Session" ToolTip.Tip="New Session" Click="NewSessionClicked" />
+          <Button Classes="reveal" Grid.Column="2" Content="⋯" AutomationProperties.Name="Projects menu">
+            <Button.Flyout>
+              <MenuFlyout>
+                <MenuItem Header="Refresh" Click="RefreshClicked" />
+                <MenuItem Header="Exit" Click="ExitClicked" />
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
         </Grid>
         <TextBlock x:Name="DiscoveryStatus" Grid.Row="1" TextWrapping="Wrap"
                    Margin="0,0,0,12" IsVisible="False" />
@@ -23,7 +40,20 @@
               <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
             </TreeDataTemplate>
             <DataTemplate DataType="local:TmuxSession" x:DataType="local:TmuxSession">
-              <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
+              <Grid Classes="actions" ColumnDefinitions="*,Auto" Background="Transparent">
+                <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" ToolTip.Tip="{Binding DisplayName}" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" IsVisible="{Binding CanStart}">
+                  <Button Classes="reveal" Content="Start" Click="StartClicked" />
+                  <Button Classes="reveal" Content="⋯" AutomationProperties.Name="Session menu">
+                    <Button.Flyout>
+                      <MenuFlyout>
+                        <MenuItem Header="Forget" Click="ForgetClicked" CommandParameter="{Binding}" />
+                      </MenuFlyout>
+                    </Button.Flyout>
+                  </Button>
+                </StackPanel>
+              </Grid>
             </DataTemplate>
           </TreeView.DataTemplates>
           <TreeView.Styles>

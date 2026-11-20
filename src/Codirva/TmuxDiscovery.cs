@@ -12,11 +12,32 @@ internal sealed record WslTarget(string Distribution, string DisplayName, bool I
 
 internal sealed record TmuxSession(string Name, string FullName, string ProjectName, WslTarget Target, string Id)
 {
+    public bool CanStart { get; init; }
+    public bool IsRunning => Id.Length != 0;
+    public SavedSession Saved => new(Target, FullName);
     public string DisplayName => $"{Name} ({Target.DisplayName}: {(Target.IsSsh ? "SSH" : "WSL")} {Target.Distribution})";
 }
 
 internal static class TmuxDiscovery
 {
+    public static async Task CreateSessionAsync(SavedSession session)
+    {
+        var (exitCode, _, error) = await RunAsync(session.Target,
+            ["new-session", "-d", "-s", session.FullName, "-c", "#{HOME}",
+                "sh", "-c", "exec \"$SHELL\" -l"]).ConfigureAwait(false);
+        if (exitCode != 0)
+        {
+            // Another client may have created the same session first.
+            var projects = await ListProjectsAsync(session.Target).ConfigureAwait(false);
+            if (!projects.SelectMany(project => project.Sessions).Any(item => item.FullName == session.FullName))
+            {
+                throw new InvalidOperationException(error.Length == 0
+                    ? $"tmux exited with code {exitCode}."
+                    : error);
+            }
+        }
+    }
+
     public static async Task<IReadOnlyList<TmuxProject>> ListProjectsAsync(WslTarget target)
     {
         var (exitCode, output, error) = await RunAsync(target,
