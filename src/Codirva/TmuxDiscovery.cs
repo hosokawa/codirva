@@ -5,9 +5,11 @@ namespace Codirva;
 
 internal sealed record TmuxProject(string Name, IReadOnlyList<TmuxSession> Sessions);
 
-internal sealed record WslTarget(string Distribution, string DisplayName, bool IsSsh = false)
+internal sealed record WslTarget(string Distribution, string DisplayName, bool IsSsh = false, bool IsWindows = false,
+    bool IsWindowsCodex = false)
 {
-    public override string ToString() => $"{DisplayName} ({(IsSsh ? "SSH" : "WSL")})";
+    public string Kind => IsWindowsCodex ? "ConPTY Codex" : IsWindows ? "ConPTY" : IsSsh ? "SSH" : "WSL";
+    public override string ToString() => $"{DisplayName} ({Kind})";
 }
 
 internal sealed record TmuxSession(string Name, string FullName, string ProjectName, WslTarget Target, string Id)
@@ -15,7 +17,8 @@ internal sealed record TmuxSession(string Name, string FullName, string ProjectN
     public bool CanStart { get; init; }
     public bool IsRunning => Id.Length != 0;
     public SavedSession Saved => new(Target, FullName);
-    public string DisplayName => $"{Name} ({Target.DisplayName}: {(Target.IsSsh ? "SSH" : "WSL")} {Target.Distribution})";
+    public string DisplayName => Target.IsWindows ? $"{Name} (Windows: {Target.Kind})"
+        : $"{Name} ({Target.DisplayName}: {Target.Kind} {Target.Distribution})";
 }
 
 internal static class TmuxDiscovery
@@ -91,8 +94,12 @@ internal static class TmuxDiscovery
     }
 
     internal static async Task<(int ExitCode, string Output, string Error)> RunAsync(
-        WslTarget target, string[] arguments, string? input = null)
+        WslTarget target, string[] arguments, string? input = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(20));
+        var token = deadline.Token;
         var startInfo = new ProcessStartInfo(target.IsSsh ? "ssh.exe" : "wsl.exe")
         {
             UseShellExecute = false,
@@ -124,17 +131,38 @@ internal static class TmuxDiscovery
         }
 
         using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Could not start wsl.exe.");
-        var output = process.StandardOutput.ReadToEndAsync();
-        var error = process.StandardError.ReadToEndAsync();
-        if (input is not null)
+            ?? throw new InvalidOperationException($"Could not start {startInfo.FileName}.");
+        var output = process.StandardOutput.ReadToEndAsync(token);
+        var error = process.StandardError.ReadToEndAsync(token);
+        try
         {
-            await process.StandardInput.WriteAsync(input).ConfigureAwait(false);
-            await process.StandardInput.DisposeAsync().ConfigureAwait(false);
-        }
+            if (input is not null)
+            {
+                await process.StandardInput.WriteAsync(input.AsMemory(), token).ConfigureAwait(false);
+                await process.StandardInput.FlushAsync(token).ConfigureAwait(false);
+                process.StandardInput.Close();
+            }
 
-        await process.WaitForExitAsync().ConfigureAwait(false);
-        return (process.ExitCode, await output.ConfigureAwait(false),
-            (await error.ConfigureAwait(false)).Replace("\0", "").Trim());
+            await Task.WhenAll(process.WaitForExitAsync(token), output, error).WaitAsync(token).ConfigureAwait(false);
+            return (process.ExitCode, await output.ConfigureAwait(false),
+                (await error.ConfigureAwait(false)).Replace("\0", "").Trim());
+        }
+        catch
+        {
+            try
+            {
+                if (!process.HasExited)
+                    process.Kill(entireProcessTree: true);
+                await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+            }
+            catch (Exception cleanupError) when (cleanupError is InvalidOperationException
+                or System.ComponentModel.Win32Exception or TimeoutException)
+            {
+                Trace.TraceWarning("Could not stop {0}: {1}", startInfo.FileName, cleanupError.Message);
+            }
+            if (deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+                throw new IOException($"tmux did not respond within 20 seconds on {target}.");
+            throw;
+        }
     }
 }

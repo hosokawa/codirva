@@ -24,13 +24,22 @@ internal static class ConnectionConfig
 
     public static IReadOnlyList<WslTarget> Load()
     {
+        var targets = new List<WslTarget>();
+        if (OperatingSystem.IsWindows())
+        {
+            targets.Add(WindowsSessions.Target);
+        }
+        if (!File.Exists(PathName) && targets.Count > 0)
+        {
+            return targets;
+        }
+
         try
         {
             var config = JsonSerializer.Deserialize<Config>(File.ReadAllText(PathName),
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             if (config?.Targets is not { Count: > 0 })
                 throw new InvalidOperationException("The targets array must contain at least one connection.");
-            var targets = new List<WslTarget>();
             foreach (var entry in config.Targets)
             {
                 if (entry is null || string.IsNullOrWhiteSpace(entry.Name))

@@ -84,6 +84,12 @@ The left pane groups sessions named `project/session` under their project name. 
 
 Selecting a session attaches the right-hand terminal to tmux. Use the terminal for interactive menus and keys such as **Ctrl+C**. Switching sessions or closing Codirva detaches its terminal client and leaves the tmux session running.
 
+To resume a Windows Codex CLI conversation from a WSL tmux session, run `sh scripts/codex-windows-resume.sh` from the repository root in the WSL terminal. This opens the Windows Codex resume picker in the current pane. Select a conversation in the terminal, then use **Send** or **Ctrl+Enter** in the Codirva composer. Windows interop must be enabled. The script looks for `codex.exe` on the Windows PATH, then checks `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin\codex.exe`.
+
+Choose **Windows (ConPTY)** in **New Session**, then start your agent in PowerShell. For example, run `codex.exe resume` to continue a Codex conversation. The composer checks the PowerShell process tree for exactly one agent executable named `codex.exe`, `claude.exe`, `pi.exe`, or `dsh.exe`, and requires bracketed paste. Keep the agent in the same terminal when using Send. Restart an existing PowerShell session to load changes to the background host.
+
+A background host keeps each Windows shell running when you switch sessions or close Codirva. Reopen Codirva and select the same session to reconnect. Use `exit` at the PowerShell prompt to stop the session. The host keeps up to 1 MiB of recent terminal output in memory for reconnection.
+
 Hover over **Projects** or focus its buttons to show **+** and **⋯**. Choose **+** to select a connection and enter a group name and session name. **Add** opens a shell in the connection's home directory and remembers the session. An existing session with the same name on the same connection is opened as well. **Refresh** and **Exit** are in the **Projects** menu.
 
 When a saved session has stopped, hover over its row or focus its actions to show **Start** and **⋯**. **Start** opens a new shell in that session. The row menu's **Forget** action removes the saved entry after checking that the session is still absent. If the connection is unavailable, the entry stays visible until its status can be checked.

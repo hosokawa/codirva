@@ -1,16 +1,20 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using RoyalTerminal.Avalonia.Controls;
 using RoyalTerminal.Terminal;
 
 namespace Codirva;
 
 public partial class MainWindow : Window
 {
-    private readonly Dictionary<TmuxSession, string> _drafts = [];
+    private readonly Dictionary<(string Kind, string Address, string Name), string> _drafts = [];
     private readonly SemaphoreSlim _terminalChange = new(1);
     private TmuxSession? _selectedSession;
     private TmuxSession? _attachedSession;
+    private Guid _windowsClient;
+    private (int Columns, int Rows)? _pendingWindowsSize;
+    private bool _resizingWindowsSession;
     private bool _refreshingSelection;
     private bool _managingSessions;
     private bool _sending;
@@ -19,8 +23,10 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        MainWindowPlacement.Remember(this);
         PromptBox.AddHandler(KeyDownEvent, PromptKeyDown, RoutingStrategies.Tunnel);
         SessionTerminal.AddHandler(KeyDownEvent, TerminalCopyCompleted, RoutingStrategies.Bubble, handledEventsToo: true);
+        SessionTerminal.TerminalResized += WindowsTerminalResized;
         SessionTerminal.ProcessExited += (_, _) =>
         {
             _attachedSession = null;
@@ -54,7 +60,7 @@ public partial class MainWindow : Window
             }
 
             var saved = SavedSessions.Load();
-            await TmuxDiscovery.CreateSessionAsync(session);
+            await StartSessionAsync(session);
             SavedSessions.Save(saved.Where(item => item.Key != session.Key).Append(session));
             await RefreshProjectsAsync(session);
         });
@@ -65,7 +71,7 @@ public partial class MainWindow : Window
         {
             await ManageSessionsAsync(async () =>
             {
-                await TmuxDiscovery.CreateSessionAsync(session.Saved);
+                await StartSessionAsync(session.Saved);
                 await RefreshProjectsAsync(session.Saved);
             });
         }
@@ -77,7 +83,7 @@ public partial class MainWindow : Window
         {
             await ManageSessionsAsync(async () =>
             {
-                var projects = await TmuxDiscovery.ListProjectsAsync(session.Target);
+                var projects = await ListProjectsAsync(session.Target, SavedSessions.Load());
                 if (!projects.SelectMany(project => project.Sessions).Any(item => item.FullName == session.FullName))
                 {
                     SavedSessions.Save(SavedSessions.Load().Where(item => item.Key != session.Saved.Key));
@@ -119,12 +125,12 @@ public partial class MainWindow : Window
     {
         ShowDiscoveryStatus("Loading sessions…");
         var saved = SavedSessions.Load();
-        var targets = ConnectionConfig.Load().DistinctBy(target => (target.IsSsh, target.Distribution));
+        var targets = ConnectionConfig.Load().DistinctBy(target => (target.Kind, target.Distribution));
         var results = await Task.WhenAll(targets.Select(async target =>
         {
             try
             {
-                return (Target: target, Projects: await TmuxDiscovery.ListProjectsAsync(target), Error: (string?)null);
+                return (Target: target, Projects: await ListProjectsAsync(target, saved), Error: (string?)null);
             }
             catch (Exception error) when (error is InvalidOperationException or IOException or System.ComponentModel.Win32Exception)
             {
@@ -142,7 +148,7 @@ public partial class MainWindow : Window
         var runningKeys = sessions.Select(session => session.Saved.Key).ToHashSet();
         foreach (var entry in saved.Where(entry => !runningKeys.Contains(entry.Key)))
         {
-            var result = results.FirstOrDefault(result => result.Target.IsSsh == entry.Target.IsSsh
+            var result = results.FirstOrDefault(result => result.Target.Kind == entry.Target.Kind
                 && result.Target.Distribution == entry.Target.Distribution);
             var names = entry.FullName.Split('/', 2);
             sessions.Add(new TmuxSession(names[1], entry.FullName, names[0], result.Target ?? entry.Target, "")
@@ -169,6 +175,12 @@ public partial class MainWindow : Window
         await SelectSessionAsync();
     }
 
+    private static Task StartSessionAsync(SavedSession session) => session.Target.IsWindows
+        ? WindowsSessions.StartAsync(session) : TmuxDiscovery.CreateSessionAsync(session);
+
+    private static Task<IReadOnlyList<TmuxProject>> ListProjectsAsync(WslTarget target, IReadOnlyList<SavedSession> saved) =>
+        target.IsWindows ? Task.FromResult(WindowsSessions.ListProjects(saved)) : TmuxDiscovery.ListProjectsAsync(target);
+
     private void ShowDiscoveryStatus(string? message)
     {
         DiscoveryStatus.Text = message;
@@ -190,16 +202,16 @@ public partial class MainWindow : Window
         {
             if (_selectedSession is not null)
             {
-                _drafts[_selectedSession] = PromptBox.Text ?? "";
+                _drafts[_selectedSession.Saved.Key] = PromptBox.Text ?? "";
             }
 
             _selectedSession = session;
-            PromptBox.Text = session is null ? "" : _drafts.GetValueOrDefault(session, "");
+            PromptBox.Text = session is null ? "" : _drafts.GetValueOrDefault(session.Saved.Key, "");
         }
 
         SessionHeading.Text = session is null
             ? "Select a session"
-            : $"{session.ProjectName}({(session.Target.IsSsh ? "SSH" : "WSL")}: {session.Target.DisplayName}) - {session.FullName}";
+            : $"{session.ProjectName}({session.Target.Kind}: {session.Target.DisplayName}) - {session.FullName}";
         UpdateComposer();
 
         await _terminalChange.WaitAsync();
@@ -211,12 +223,13 @@ public partial class MainWindow : Window
             }
 
             _attachedSession = null;
+            _pendingWindowsSize = null;
             SessionTerminal.IsVisible = false;
             SessionTerminal.StopPty();
             ShowTerminalStatus(session switch
             {
                 null => null,
-                { IsRunning: true } => "Connecting to tmux…",
+                { IsRunning: true } => "Connecting to session…",
                 { CanStart: true } => "Session is stopped.",
                 _ => "Session status is unavailable.",
             });
@@ -232,13 +245,17 @@ public partial class MainWindow : Window
                 "--distribution", session.Target.Distribution, "--exec", "env", "TERM=xterm-256color",
                 "tmux", "-u", "attach-session", "-t", session.Id,
             ];
+            // ConPTY owns the Windows screen's resize and sends its updates back over the relay.
+            SessionTerminal.ReflowOnResize = !session.Target.IsWindows;
             SessionTerminal.IsVisible = true;
-            await SessionTerminal.StartSessionAsync(new PtyTransportOptions(
-                new TerminalCommandSpec(session.Target.IsSsh ? "ssh.exe" : "wsl.exe", arguments),
-                WorkingDirectory: null,
-                Environment: null,
-                new TerminalSessionDimensions(SessionTerminal.Columns, SessionTerminal.Rows,
-                    (int)SessionTerminal.Bounds.Width, (int)SessionTerminal.Bounds.Height)));
+            var dimensions = new TerminalSessionDimensions(SessionTerminal.Columns, SessionTerminal.Rows,
+                (int)SessionTerminal.Bounds.Width, (int)SessionTerminal.Bounds.Height);
+            _windowsClient = Guid.NewGuid();
+            ITerminalTransportOptions options = session.Target.IsWindows
+                ? new PipeTransportOptions(WindowsSessions.RelayCommand(session.Id, _windowsClient, dimensions), null, null, false, dimensions)
+                : new PtyTransportOptions(new TerminalCommandSpec(session.Target.IsSsh ? "ssh.exe" : "wsl.exe", arguments),
+                    null, null, dimensions);
+            await SessionTerminal.StartSessionAsync(options);
             if (_closed || session != _selectedSession)
             {
                 SessionTerminal.StopPty();
@@ -253,12 +270,48 @@ public partial class MainWindow : Window
         }
         catch (Exception error) when (error is InvalidOperationException or IOException or System.ComponentModel.Win32Exception)
         {
-            ShowTerminalStatus($"Could not attach to tmux. {error.Message}");
+            ShowTerminalStatus($"Could not attach to the session. {error.Message}");
         }
         finally
         {
             _terminalChange.Release();
             UpdateComposer();
+        }
+    }
+
+    private async void WindowsTerminalResized(object? sender, TerminalSizeEventArgs size)
+    {
+        if (_attachedSession is not { Target.IsWindows: true })
+            return;
+
+        _pendingWindowsSize = (size.Columns, size.Rows);
+        if (_resizingWindowsSession)
+            return;
+
+        _resizingWindowsSession = true;
+        try
+        {
+            while (_pendingWindowsSize is not null)
+            {
+                // Coalesce a drag's intermediate sizes and keep host requests in order.
+                await Task.Delay(75);
+                var latest = _pendingWindowsSize;
+                _pendingWindowsSize = null;
+                if (latest is not { } dimensions || _attachedSession is not { Target.IsWindows: true } session)
+                    continue;
+                try
+                {
+                    await WindowsSessions.ResizeAsync(session.Id, _windowsClient, dimensions.Columns, dimensions.Rows);
+                }
+                catch (Exception error) when (error is IOException or InvalidOperationException)
+                {
+                    // A resize can race with disconnecting the relay.
+                }
+            }
+        }
+        finally
+        {
+            _resizingWindowsSession = false;
         }
     }
 
@@ -308,7 +361,16 @@ public partial class MainWindow : Window
         UpdateComposer();
         try
         {
-            await TmuxPrompt.SendAsync(session, prompt);
+            if (session.Target.IsWindows)
+            {
+                if (SessionTerminal.TerminalSessionService.ModeSource?.ModeState.BracketedPaste != true)
+                    throw new InvalidOperationException("Start a supported agent with bracketed paste enabled in the Windows terminal before sending a prompt.");
+                await WindowsSessions.SubmitAsync(session.Id, _windowsClient, prompt, session.Target.IsWindowsCodex);
+            }
+            else
+            {
+                await TmuxPrompt.SendAsync(session, prompt);
+            }
             if (_selectedSession == session)
             {
                 PromptBox.Clear();
