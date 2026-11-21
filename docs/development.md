@@ -96,6 +96,18 @@ When a saved session has stopped, hover over its row or focus its actions to sho
 
 To send a prompt, launch Codex CLI or Claude Code in a tmux session with one window and one pane. When the agent is ready for input, type in Codirva’s prompt box. **Enter** inserts a newline. **Ctrl+Enter** or **Send** pastes and submits the prompt to the selected pane. The pane must have bracketed paste enabled and must not be in copy mode. Drafts are held per session while Codirva is open. Verify multiline and Japanese input with your agent before relying on it.
 
+## Run the regression tests
+
+From the repository root in PowerShell, run:
+
+```powershell
+dotnet test Codirva.slnx
+```
+
+This builds Codirva and runs the xUnit tests. The tests cover malformed saved sessions, stable session identity for drafts, and Windows agent selection from a process tree. They run without a WSL or SSH connection and without starting a terminal or an agent.
+
+Add tests for new behavior and regression tests for bug fixes where practical. Run the suite before committing changes.
+
 ## Tools for later milestones
 
 - **Avalonia editing tools.** The optional Avalonia for VSCode extension adds `.axaml` editing support. Install project templates with `dotnet new install Avalonia.Templates` if you need to create a new Avalonia project. [Avalonia template setup](https://docs.avaloniaui.net/docs/get-started/install-avalonia) · [VS Code setup](https://docs.avaloniaui.net/docs/get-started/set-up-your-ide)

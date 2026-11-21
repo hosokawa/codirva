@@ -17,26 +17,27 @@ internal static class WindowsProcesses
         if (snapshot.IsInvalid || !Process32First(snapshot, ref entry))
             return null;
 
-        var children = new Dictionary<uint, List<(uint Id, string Name)>>();
+        var processes = new List<(uint Id, uint ParentId, string Name)>();
         do
         {
-            if (!children.TryGetValue(entry.ParentId, out var siblings))
-            {
-                siblings = [];
-                children.Add(entry.ParentId, siblings);
-            }
-            siblings.Add((entry.Id, entry.Name));
+            processes.Add((entry.Id, entry.ParentId, entry.Name));
         } while (Process32Next(snapshot, ref entry));
+        return FindSingleAgent((uint)shellPid, processes);
+    }
+
+    internal static uint? FindSingleAgent(uint shellPid, IEnumerable<(uint Id, uint ParentId, string Name)> processes)
+    {
+        var children = processes.ToLookup(process => process.ParentId);
 
         var pending = new Queue<uint>();
         var visited = new HashSet<uint>();
         uint? agent = null;
-        pending.Enqueue((uint)shellPid);
+        pending.Enqueue(shellPid);
         while (pending.TryDequeue(out var parent))
         {
-            if (!visited.Add(parent) || !children.TryGetValue(parent, out var descendants))
+            if (!visited.Add(parent))
                 continue;
-            foreach (var child in descendants)
+            foreach (var child in children[parent])
             {
                 if (AgentExecutables.Contains(child.Name))
                 {
