@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Codirva/Codirva.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Codirva.Tests/Codirva.Tests.csproj" />
+  </Folder>
+</Solution>

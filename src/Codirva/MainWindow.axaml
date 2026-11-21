@@ -1,0 +1,86 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:Codirva"
+        xmlns:terminal="using:RoyalTerminal.Avalonia.Controls"
+        x:Class="Codirva.MainWindow"
+        Title="Codirva" Icon="avares://Codirva/Assets/codirva.ico" Width="880" Height="540" MinWidth="520" MinHeight="320">
+  <Grid ColumnDefinitions="290,*">
+    <Grid.Styles>
+      <Style Selector="Button.reveal">
+        <Setter Property="Opacity" Value="0" />
+      </Style>
+      <Style Selector="Grid.actions:pointerover Button.reveal, Grid.actions:focus-within Button.reveal, Button.reveal:flyout-open">
+        <Setter Property="Opacity" Value="1" />
+      </Style>
+    </Grid.Styles>
+    <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+            BorderThickness="0,0,1,0" Padding="16">
+      <Grid RowDefinitions="Auto,Auto,*">
+        <Grid Classes="actions" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Margin="0,0,0,12"
+              Background="Transparent">
+          <TextBlock Text="Projects" FontSize="20" FontWeight="SemiBold"
+                     VerticalAlignment="Center" />
+          <Button x:Name="NewSessionButton" Classes="reveal" Grid.Column="1" Content="+"
+                  AutomationProperties.Name="New Session" ToolTip.Tip="New Session" Click="NewSessionClicked" />
+          <Button Classes="reveal" Grid.Column="2" Content="⋯" AutomationProperties.Name="Projects menu">
+            <Button.Flyout>
+              <MenuFlyout>
+                <MenuItem Header="Refresh" Click="RefreshClicked" />
+                <MenuItem Header="Exit" Click="ExitClicked" />
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
+        </Grid>
+        <TextBlock x:Name="DiscoveryStatus" Grid.Row="1" TextWrapping="Wrap"
+                   Margin="0,0,0,12" IsVisible="False" />
+        <TreeView x:Name="ProjectsTree" Grid.Row="2" SelectionChanged="ProjectSelectionChanged">
+          <TreeView.DataTemplates>
+            <TreeDataTemplate DataType="local:TmuxProject" x:DataType="local:TmuxProject"
+                              ItemsSource="{Binding Sessions}">
+              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+            </TreeDataTemplate>
+            <DataTemplate DataType="local:TmuxSession" x:DataType="local:TmuxSession">
+              <Grid Classes="actions" ColumnDefinitions="*,Auto" Background="Transparent">
+                <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" ToolTip.Tip="{Binding DisplayName}" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" IsVisible="{Binding CanStart}">
+                  <Button Classes="reveal" Content="Start" Click="StartClicked" />
+                  <Button Classes="reveal" Content="⋯" AutomationProperties.Name="Session menu">
+                    <Button.Flyout>
+                      <MenuFlyout>
+                        <MenuItem Header="Forget" Click="ForgetClicked" CommandParameter="{Binding}" />
+                      </MenuFlyout>
+                    </Button.Flyout>
+                  </Button>
+                </StackPanel>
+              </Grid>
+            </DataTemplate>
+          </TreeView.DataTemplates>
+          <TreeView.Styles>
+            <Style Selector="TreeViewItem">
+              <Setter Property="IsExpanded" Value="True" />
+            </Style>
+          </TreeView.Styles>
+        </TreeView>
+      </Grid>
+    </Border>
+    <Grid Grid.Column="1" Margin="16" RowDefinitions="Auto,*,Auto" RowSpacing="8">
+      <TextBlock x:Name="SessionHeading" Text="Select a session" FontSize="12"
+                 Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                 TextAlignment="Right" TextTrimming="CharacterEllipsis" />
+      <Border Grid.Row="1" Background="#171717" ClipToBounds="True">
+        <terminal:TerminalControl x:Name="SessionTerminal" TerminalFontSize="13" IsVisible="False" />
+      </Border>
+      <Grid Grid.Row="2" RowDefinitions="Auto,Auto" RowSpacing="6" ColumnDefinitions="*,Auto"
+            ColumnSpacing="8">
+        <TextBox x:Name="PromptBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="68"
+                 MaxHeight="144" PlaceholderText="Enter a prompt" IsEnabled="False"
+                 AutomationProperties.Name="Prompt" TextChanged="PromptChanged" />
+        <Button x:Name="SendButton" Grid.Column="1" VerticalAlignment="Bottom"
+                Content="Send" ToolTip.Tip="Ctrl+Enter" IsEnabled="False" Click="SendClicked" />
+        <TextBlock x:Name="TerminalStatus" Grid.Row="1" Grid.ColumnSpan="2" FontSize="12"
+                   TextWrapping="Wrap" IsVisible="False" />
+      </Grid>
+    </Grid>
+  </Grid>
+</Window>

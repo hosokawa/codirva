@@ -1,0 +1,14 @@
+{
+  "targets": [
+    {
+      "name": "Arch Linux",
+      "type": "wsl",
+      "distribution": "archlinux"
+    },
+    {
+      "name": "seiran",
+      "type": "ssh",
+      "host": "seiran"
+    }
+  ]
+}
