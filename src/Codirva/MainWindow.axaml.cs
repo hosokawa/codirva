@@ -248,6 +248,8 @@ public partial class MainWindow : Window
             // ConPTY owns the Windows screen's resize and sends its updates back over the relay.
             SessionTerminal.ReflowOnResize = !session.Target.IsWindows;
             SessionTerminal.IsVisible = true;
+            if (session.Target.IsWindows)
+                UpdateLayout();
             var dimensions = new TerminalSessionDimensions(SessionTerminal.Columns, SessionTerminal.Rows,
                 (int)SessionTerminal.Bounds.Width, (int)SessionTerminal.Bounds.Height);
             _windowsClient = Guid.NewGuid();
