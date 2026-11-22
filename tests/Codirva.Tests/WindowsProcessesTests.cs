@@ -21,6 +21,23 @@ public sealed class WindowsProcessesTests
     }
 
     [Fact]
+    public void CountsSameExecutableHelpersAsPartOfTheirAgent()
+    {
+        Assert.Equal(11u, WindowsProcesses.FindSingleAgent(10,
+            [(11u, 10u, "codex.exe"), (12u, 11u, "CODEX.EXE"), (13u, 11u, "codex.exe"),
+             (14u, 12u, "wrapper.exe"), (15u, 14u, "codex.exe")]));
+    }
+
+    [Theory]
+    [InlineData(10u, "codex.exe")]
+    [InlineData(11u, "pi.exe")]
+    public void RejectsASeparateAgent(uint parent, string executable)
+    {
+        Assert.Null(WindowsProcesses.FindSingleAgent(10,
+            [(11u, 10u, "codex.exe"), (12u, parent, executable)]));
+    }
+
+    [Fact]
     public void RejectsUnsupportedNamesAndUnrelatedAgents()
     {
         Assert.Null(WindowsProcesses.FindSingleAgent(10,

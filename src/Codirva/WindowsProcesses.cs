@@ -29,23 +29,28 @@ internal static class WindowsProcesses
     {
         var children = processes.ToLookup(process => process.ParentId);
 
-        var pending = new Queue<uint>();
+        var pending = new Queue<(uint Id, bool UnderAgent)>();
         var visited = new HashSet<uint>();
         uint? agent = null;
-        pending.Enqueue(shellPid);
-        while (pending.TryDequeue(out var parent))
+        string? agentName = null;
+        pending.Enqueue((shellPid, false));
+        while (pending.TryDequeue(out var node))
         {
-            if (!visited.Add(parent))
+            if (!visited.Add(node.Id))
                 continue;
-            foreach (var child in children[parent])
+            foreach (var child in children[node.Id])
             {
-                if (AgentExecutables.Contains(child.Name))
+                var isAgent = AgentExecutables.Contains(child.Name);
+                // An agent can spawn helpers with the same executable name.
+                if (isAgent && !(node.UnderAgent &&
+                    string.Equals(child.Name, agentName, StringComparison.OrdinalIgnoreCase)))
                 {
                     if (agent is not null)
                         return null;
                     agent = child.Id;
+                    agentName = child.Name;
                 }
-                pending.Enqueue(child.Id);
+                pending.Enqueue((child.Id, node.UnderAgent || isAgent));
             }
         }
         return agent;
