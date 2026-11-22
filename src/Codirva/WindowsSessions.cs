@@ -197,11 +197,9 @@ internal static class WindowsSessions
             return 0;
         using var pty = new DefaultPtyFactory().Create();
         using var lifetime = new CancellationTokenSource();
-        var host = new SessionHost(id, pty);
+        var host = new SessionHost(id, pty, lifetime.Cancel);
         pty.DataReceived += host.ReceiveOutput;
         pty.ProcessExited += _ => lifetime.Cancel();
-        pty.Start(Shell, 100, 30, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            arguments: ["-NoLogo"]);
         try
         {
             await Task.WhenAll(host.AcceptClientsAsync(lifetime.Token), host.HandleControlAsync(lifetime.Token));
@@ -212,7 +210,7 @@ internal static class WindowsSessions
         return 0;
     }
 
-    private sealed class SessionHost(string id, IPty pty)
+    private sealed class SessionHost(string id, IPty pty, Action stop)
     {
         private readonly object _gate = new();
         private readonly object _inputGate = new();
@@ -220,6 +218,9 @@ internal static class WindowsSessions
         private int _historyBytes;
         private Channel<byte[]>? _output;
         private Guid _client;
+        private readonly WindowsConsoleSize _consoleSize = new((columns, rows) =>
+            pty.Start(Shell, columns, rows, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                arguments: ["-NoLogo"]), pty.Resize);
 
         public void ReceiveOutput(byte[] bytes, int length)
         {
@@ -330,7 +331,17 @@ internal static class WindowsSessions
                 {
                     if (!IsActiveClient(client))
                         return false;
-                    pty.Resize(Math.Clamp(BitConverter.ToInt32(size), 1, 500), Math.Clamp(BitConverter.ToInt32(size, 4), 1, 500));
+                    try
+                    {
+                        _consoleSize.Apply(BitConverter.ToInt32(size), BitConverter.ToInt32(size, 4));
+                    }
+                    catch (Exception error) when (error is InvalidOperationException or IOException
+                        or System.ComponentModel.Win32Exception)
+                    {
+                        Trace.TraceWarning("Could not size Windows terminal: {0}", error.Message);
+                        stop();
+                        return false;
+                    }
                     return true;
                 }
             }
