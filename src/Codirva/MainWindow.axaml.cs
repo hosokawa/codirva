@@ -376,9 +376,7 @@ public partial class MainWindow : Window
         {
             if (session.Target.IsWindows)
             {
-                if (SessionTerminal.TerminalSessionService.ModeSource?.ModeState.BracketedPaste != true)
-                    throw new InvalidOperationException("Start a supported agent with bracketed paste enabled in the Windows terminal before sending a prompt.");
-                await WindowsSessions.SubmitAsync(session.Id, _windowsClient, prompt, session.Target.IsWindowsCodex);
+                await WindowsSessions.SubmitAsync(session.Id, _windowsClient, prompt);
             }
             else
             {
