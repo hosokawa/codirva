@@ -3,6 +3,7 @@ using System.IO.Pipes;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Channels;
+using RoyalTerminal.Avalonia.Rendering;
 using RoyalTerminal.Terminal;
 
 namespace Codirva;
@@ -14,6 +15,8 @@ internal static class WindowsSessions
     private const byte Resize = 1;
     private const byte Submit = 2;
     private const byte AgentTreeSubmitSupported = 3;
+    private const byte HostPasteModeSupported = 4;
+    private enum ControlResult : byte { Rejected, Accepted, BracketedPasteDisabled }
     // ConPTY Win32 key records. Ctrl+J inserts a newline in Codex without submitting.
     private const string NewLineKey = "\u001b[74;36;10;1;8;1_\u001b[74;36;0;0;0;1_";
     private const string EnterKey = "\u001b[13;28;13;1;0;1_\u001b[13;28;0;0;0;1_";
@@ -123,19 +126,16 @@ internal static class WindowsSessions
     public static Task ResizeAsync(string id, Guid client, int cols, int rows) =>
         ControlAsync(id, client, Resize, writer => { writer.Write(cols); writer.Write(rows); });
 
-    public static async Task SubmitAsync(string id, Guid client, string prompt, bool legacyCodexSession)
+    public static async Task SubmitAsync(string id, Guid client, string prompt)
     {
         if (prompt.Any(character => char.IsControl(character) && character is not ('\r' or '\n' or '\t')))
             throw new InvalidOperationException("The prompt contains unsupported control characters.");
         var text = Encoding.UTF8.GetBytes(prompt.ReplaceLineEndings("\n"));
         if (text.Length > 1024 * 1024)
             throw new InvalidOperationException("The prompt is too large for the Windows session.");
-        if (!legacyCodexSession)
-        {
-            await ControlAsync(id, client, AgentTreeSubmitSupported, rejectedMessage:
-                "This session is using an older host. Exit the agent and PowerShell, then right-click the session name and choose Start.")
-                .ConfigureAwait(false);
-        }
+        await ControlAsync(id, client, HostPasteModeSupported, rejectedMessage:
+            "This session is using an older host. Exit the agent and PowerShell, then right-click the session name and choose Start.")
+            .ConfigureAwait(false);
         await ControlAsync(id, client, Submit, writer => { writer.Write(text.Length); writer.Write(text); })
             .ConfigureAwait(false);
     }
@@ -156,7 +156,9 @@ internal static class WindowsSessions
             await pipe.WriteAsync(request.GetBuffer().AsMemory(0, (int)request.Length), timeout.Token).ConfigureAwait(false);
             var response = new byte[1];
             await pipe.ReadExactlyAsync(response, timeout.Token).ConfigureAwait(false);
-            if (response[0] != 1)
+            if ((ControlResult)response[0] == ControlResult.BracketedPasteDisabled)
+                throw new InvalidOperationException("The Windows session has not enabled bracketed paste. Start a supported agent before sending a prompt.");
+            if ((ControlResult)response[0] != ControlResult.Accepted)
                 throw new InvalidOperationException(rejectedMessage ??
                     "The Windows session is disconnected or does not have exactly one supported agent process.");
         }
@@ -195,9 +197,10 @@ internal static class WindowsSessions
         using var mutex = new Mutex(false, MutexName(id), out var created);
         if (!created)
             return 0;
-        using var pty = new DefaultPtyFactory().Create();
+        using var modes = CreateModeTracker();
         using var lifetime = new CancellationTokenSource();
-        var host = new SessionHost(id, pty, lifetime.Cancel);
+        using var pty = new DefaultPtyFactory().Create();
+        var host = new SessionHost(id, pty, lifetime.Cancel, modes);
         pty.DataReceived += host.ReceiveOutput;
         pty.ProcessExited += _ => lifetime.Cancel();
         try
@@ -207,10 +210,17 @@ internal static class WindowsSessions
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
         {
         }
+        finally
+        {
+            pty.DataReceived -= host.ReceiveOutput;
+        }
         return 0;
     }
 
-    private sealed class SessionHost(string id, IPty pty, Action stop)
+    internal static BasicVtProcessor CreateModeTracker() =>
+        new(new TerminalScreen(columns: 1, viewportRows: 1, scrollbackLimit: 0));
+
+    private sealed class SessionHost(string id, IPty pty, Action stop, BasicVtProcessor modes)
     {
         private readonly object _gate = new();
         private readonly object _inputGate = new();
@@ -227,6 +237,8 @@ internal static class WindowsSessions
             var chunk = bytes.AsSpan(0, length).ToArray();
             lock (_gate)
             {
+                // Keep the mode even when the output that enabled it ages out of replay history.
+                modes.Process(chunk);
                 _history.Enqueue(chunk);
                 _historyBytes += length;
                 while (_historyBytes > 1024 * 1024)
@@ -310,9 +322,10 @@ internal static class WindowsSessions
                     await pipe.ReadExactlyAsync(header, cancellationToken);
                     var operation = header[0];
                     var client = new Guid(header.AsSpan(1));
-                    var accepted = operation is Ping or AgentTreeSubmitSupported
-                        || await ApplyControlAsync(pipe, operation, client, cancellationToken);
-                    await pipe.WriteAsync(new byte[] { accepted ? (byte)1 : (byte)0 }, cancellationToken);
+                    var result = operation is Ping or AgentTreeSubmitSupported or HostPasteModeSupported
+                        ? ControlResult.Accepted
+                        : await ApplyControlAsync(pipe, operation, client, cancellationToken);
+                    await pipe.WriteAsync(new byte[] { (byte)result }, cancellationToken);
                 }
                 catch (IOException)
                 {
@@ -321,7 +334,7 @@ internal static class WindowsSessions
             }
         }
 
-        private async Task<bool> ApplyControlAsync(Stream pipe, byte operation, Guid client, CancellationToken cancellationToken)
+        private async Task<ControlResult> ApplyControlAsync(Stream pipe, byte operation, Guid client, CancellationToken cancellationToken)
         {
             if (operation == Resize)
             {
@@ -330,7 +343,7 @@ internal static class WindowsSessions
                 lock (_inputGate)
                 {
                     if (!IsActiveClient(client))
-                        return false;
+                        return ControlResult.Rejected;
                     try
                     {
                         _consoleSize.Apply(BitConverter.ToInt32(size), BitConverter.ToInt32(size, 4));
@@ -340,19 +353,19 @@ internal static class WindowsSessions
                     {
                         Trace.TraceWarning("Could not size Windows terminal: {0}", error.Message);
                         stop();
-                        return false;
+                        return ControlResult.Rejected;
                     }
-                    return true;
+                    return ControlResult.Accepted;
                 }
             }
             if (operation != Submit)
-                return false;
+                return ControlResult.Rejected;
 
             var length = new byte[4];
             await pipe.ReadExactlyAsync(length, cancellationToken);
             var count = BitConverter.ToInt32(length);
             if (count is < 1 or > 1024 * 1024)
-                return false;
+                return ControlResult.Rejected;
             var text = new byte[count];
             await pipe.ReadExactlyAsync(text, cancellationToken);
             var paste = new StringBuilder();
@@ -368,8 +381,15 @@ internal static class WindowsSessions
             lock (_inputGate)
             {
                 targetPid = GetAgentPid();
-                if (targetPid is null || !IsActiveClient(client))
-                    return false;
+                if (targetPid is null)
+                    return ControlResult.Rejected;
+                lock (_gate)
+                {
+                    if (client == Guid.Empty || _client != client)
+                        return ControlResult.Rejected;
+                    if (!modes.BracketedPaste)
+                        return ControlResult.BracketedPasteDisabled;
+                }
                 pty.Write(paste.ToString());
             }
 
@@ -378,9 +398,9 @@ internal static class WindowsSessions
             lock (_inputGate)
             {
                 if (!IsActiveClient(client) || GetAgentPid() != targetPid)
-                    return false;
+                    return ControlResult.Rejected;
                 pty.Write(EnterKey);
-                return true;
+                return ControlResult.Accepted;
             }
         }
 
