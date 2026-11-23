@@ -40,19 +40,15 @@
               <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
             </TreeDataTemplate>
             <DataTemplate DataType="local:TmuxSession" x:DataType="local:TmuxSession">
-              <Grid Classes="actions" ColumnDefinitions="*,Auto" Background="Transparent">
+              <Grid x:Name="SessionRow" Background="Transparent">
+                <Grid.ContextMenu>
+                  <ContextMenu DataContext="{Binding #SessionRow.DataContext}" Opening="SessionMenuOpening">
+                    <MenuItem Header="Start" Click="StartClicked" CommandParameter="{Binding}" />
+                    <MenuItem Header="Forget" Click="ForgetClicked" CommandParameter="{Binding}" />
+                  </ContextMenu>
+                </Grid.ContextMenu>
                 <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"
                            VerticalAlignment="Center" ToolTip.Tip="{Binding DisplayName}" />
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" IsVisible="{Binding CanStart}">
-                  <Button Classes="reveal" Content="Start" Click="StartClicked" />
-                  <Button Classes="reveal" Content="⋯" AutomationProperties.Name="Session menu">
-                    <Button.Flyout>
-                      <MenuFlyout>
-                        <MenuItem Header="Forget" Click="ForgetClicked" CommandParameter="{Binding}" />
-                      </MenuFlyout>
-                    </Button.Flyout>
-                  </Button>
-                </StackPanel>
               </Grid>
             </DataTemplate>
           </TreeView.DataTemplates>

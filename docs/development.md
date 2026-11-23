@@ -92,7 +92,7 @@ A background host keeps each Windows shell running when you switch sessions or c
 
 Hover over **Projects** or focus its buttons to show **+** and **⋯**. Choose **+** to select a connection and enter a group name and session name. **Add** opens a shell in the connection's home directory and remembers the session. An existing session with the same name on the same connection is opened as well. **Refresh** and **Exit** are in the **Projects** menu.
 
-When a saved session has stopped, hover over its row or focus its actions to show **Start** and **⋯**. **Start** opens a new shell in that session. The row menu's **Forget** action removes the saved entry after checking that the session is still absent. If the connection is unavailable, the entry stays visible until its status can be checked.
+Right-click a session name to open its context menu. For a stopped saved session on a reachable connection, **Start** opens a new shell and **Forget** removes the saved entry after checking that the session is still absent. Both actions are disabled while the session is running or its status cannot be checked.
 
 To send a prompt, launch Codex CLI or Claude Code in a tmux session with one window and one pane. When the agent is ready for input, type in Codirva’s prompt box. **Enter** inserts a newline. **Ctrl+Enter** or **Send** pastes and submits the prompt to the selected pane. The pane must have bracketed paste enabled and must not be in copy mode. Drafts are held per session while Codirva is open. Verify multiline and Japanese input with your agent before relying on it.
 

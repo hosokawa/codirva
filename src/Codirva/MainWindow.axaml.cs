@@ -65,9 +65,20 @@ public partial class MainWindow : Window
             await RefreshProjectsAsync(session);
         });
 
+    private void SessionMenuOpening(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (sender is not ContextMenu menu)
+            return;
+
+        var canManage = !_managingSessions && !_sending && !_closed
+            && menu.DataContext is TmuxSession { CanStart: true };
+        foreach (var item in menu.Items.OfType<MenuItem>())
+            item.IsEnabled = canManage;
+    }
+
     private async void StartClicked(object? sender, RoutedEventArgs e)
     {
-        if (sender is Button { DataContext: TmuxSession { CanStart: true } session })
+        if (sender is MenuItem { CommandParameter: TmuxSession { CanStart: true } session })
         {
             await ManageSessionsAsync(async () =>
             {
@@ -230,7 +241,7 @@ public partial class MainWindow : Window
             {
                 null => null,
                 { IsRunning: true } => "Connecting to session…",
-                { CanStart: true } => "Session is stopped.",
+                { CanStart: true } => "Session is stopped. Right-click its name and choose Start.",
                 _ => "Session status is unavailable.",
             });
             if (session is not { IsRunning: true })

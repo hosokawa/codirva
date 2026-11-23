@@ -133,7 +133,7 @@ internal static class WindowsSessions
         if (!legacyCodexSession)
         {
             await ControlAsync(id, client, AgentTreeSubmitSupported, rejectedMessage:
-                "This session is using an older host. Exit the agent and PowerShell, then use Start to reopen the session.")
+                "This session is using an older host. Exit the agent and PowerShell, then right-click the session name and choose Start.")
                 .ConfigureAwait(false);
         }
         await ControlAsync(id, client, Submit, writer => { writer.Write(text.Length); writer.Write(text); })
