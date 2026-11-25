@@ -34,6 +34,16 @@
         <TextBlock x:Name="DiscoveryStatus" Grid.Row="1" TextWrapping="Wrap"
                    Margin="0,0,0,12" IsVisible="False" />
         <TreeView x:Name="ProjectsTree" Grid.Row="2" SelectionChanged="ProjectSelectionChanged">
+          <TreeView.Resources>
+            <SolidColorBrush x:Key="TreeViewItemBackgroundSelected" Color="Transparent" />
+            <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPointerOver" Color="Transparent" />
+            <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPressed" Color="Transparent" />
+            <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedDisabled" Color="Transparent" />
+            <SolidColorBrush x:Key="TreeViewItemBorderBrushSelected" Color="Transparent" />
+            <SolidColorBrush x:Key="TreeViewItemBorderBrushSelectedPointerOver" Color="Transparent" />
+            <SolidColorBrush x:Key="TreeViewItemBorderBrushSelectedPressed" Color="Transparent" />
+            <SolidColorBrush x:Key="TreeViewItemBorderBrushSelectedDisabled" Color="Transparent" />
+          </TreeView.Resources>
           <TreeView.DataTemplates>
             <TreeDataTemplate DataType="local:TmuxProject" x:DataType="local:TmuxProject"
                               ItemsSource="{Binding Sessions}">
@@ -47,7 +57,8 @@
                     <MenuItem Header="Forget" Click="ForgetClicked" CommandParameter="{Binding}" />
                   </ContextMenu>
                 </Grid.ContextMenu>
-                <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"
+                <TextBlock Classes="session-label" Classes.stopped="{Binding !IsRunning}"
+                           Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"
                            VerticalAlignment="Center" ToolTip.Tip="{Binding DisplayName}" />
               </Grid>
             </DataTemplate>
@@ -55,6 +66,15 @@
           <TreeView.Styles>
             <Style Selector="TreeViewItem">
               <Setter Property="IsExpanded" Value="True" />
+            </Style>
+            <Style Selector="TreeViewItem:selected TextBlock.session-label">
+              <Setter Property="FontWeight" Value="Bold" />
+            </Style>
+            <Style Selector="TextBlock.session-label">
+              <Setter Property="Foreground" Value="{DynamicResource TreeViewItemForeground}" />
+            </Style>
+            <Style Selector="TextBlock.session-label.stopped">
+              <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
             </Style>
           </TreeView.Styles>
         </TreeView>
